@@ -14,7 +14,7 @@ The data used for this project come from [Groupware\@LES](http://groupware.les.i
 ## 1.Loading packages and data
 At first we load the training and test data in the R datasets package.
 
-```{r echo = FALSE}
+```{r message=FALSE}
 library(knitr); library("caret"); library("randomForest")
 wd <- getwd()
 fileUrl_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"

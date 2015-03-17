@@ -75,10 +75,20 @@ img {
 <div id="loading-packages-and-data" class="section level2">
 <h2>1.Loading packages and data</h2>
 <p>At first we load the training and test data in the R datasets package.</p>
-<pre><code>## Loading required package: lattice
-## Loading required package: ggplot2
-## randomForest 4.6-10
-## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre class="r"><code>library(knitr); library(&quot;caret&quot;); library(&quot;randomForest&quot;)
+wd &lt;- getwd()
+fileUrl_train &lt;- &quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv&quot;
+fileUrl_test &lt;- &quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv&quot;
+file_train &lt;- &quot;pml-training.csv&quot;
+file_test &lt;- &quot;pml-testing.csv&quot;
+if(!file.exists(file_train)) {
+        download.file(fileUrl_train, file_train)
+}
+if(!file.exists(file_test)) {
+        download.file(fileUrl_test, file_test)
+}
+training &lt;- read.csv(paste(wd, &quot;/&quot;, file_train, sep = &quot;&quot;))
+testing &lt;- read.csv(paste(wd, &quot;/&quot;, file_test, sep = &quot;&quot;))</code></pre>
 </div>
 <div id="basic-exploratory-data-analyses-and-cleansing" class="section level2">
 <h2>2.Basic exploratory data analyses and cleansing</h2>
@@ -139,7 +149,7 @@ sapply(folds,length)</code></pre>
 testingset1 &lt;- training[-folds[[1]],]
 system.time(fit1 &lt;- randomForest(classe ~ ., data=trainingset1))</code></pre>
 <pre><code>##    user  system elapsed 
-##   39.38    0.23   39.96</code></pre>
+##   38.91    0.51   39.65</code></pre>
 <pre class="r"><code>pred1 &lt;- predict(fit1, testingset1)
 accuracy1 &lt;- sum(testingset1$classe == pred1)/length(pred1)
 accuracy1</code></pre>
@@ -177,7 +187,7 @@ accuracy1</code></pre>
 <p>According to the plot, as the number of trees grow, the error rate decreases until around 30 to 50 trees and then it seems to become flat at well below 2%. Probably tuning the number of trees grown (ntree) could improve the performance (computation) without sacrificing the accuracy. We will see the difference by fitting with “ntree = 50”.</p>
 <pre class="r"><code>system.time(fit50 &lt;- randomForest(classe ~ ., data=trainingset1, ntree=50))</code></pre>
 <pre><code>##    user  system elapsed 
-##    4.19    0.11    4.35</code></pre>
+##    4.49    0.17    4.73</code></pre>
 <pre class="r"><code>pred50 &lt;- predict(fit50, testingset1)
 accuracy50 &lt;- sum(testingset1$classe == pred50)/length(pred50)
 accuracy50</code></pre>
@@ -213,10 +223,10 @@ testingset2 &lt;- training[-folds[[2]],]
 testingset3 &lt;- training[-folds[[3]],]
 system.time(fit2 &lt;- randomForest(classe ~ ., data=trainingset2, ntree=50))</code></pre>
 <pre><code>##    user  system elapsed 
-##    4.03    0.11    4.15</code></pre>
+##    3.97    0.03    4.07</code></pre>
 <pre class="r"><code>system.time(fit3 &lt;- randomForest(classe ~ ., data=trainingset3, ntree=50))</code></pre>
 <pre><code>##    user  system elapsed 
-##    4.01    0.08    4.14</code></pre>
+##    4.07    0.00    4.07</code></pre>
 <p>The performance to fit the model with “ntree=50” is quite stable around 4 second.</p>
 <pre class="r"><code>pred2 &lt;- predict(fit2, testingset2)
 pred3 &lt;- predict(fit3, testingset3)
