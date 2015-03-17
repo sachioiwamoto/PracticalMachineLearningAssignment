@@ -1,0 +1,206 @@
+---
+title: "Practical Machine Learning - Course Project: Writeup"
+author: "Sachio Iwamoto"
+date: "Tuesday, March 17, 2015"
+output:
+  html_document
+---
+
+## Overview
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). The goal of the project is to predict how well they did the exercise.
+
+The data used for this project come from [Groupware\@LES](http://groupware.les.inf.puc-rio.br/har).
+
+## 1.Loading packages and data
+At first we load the training and test data in the R datasets package.
+
+```{r echo = FALSE}
+library(knitr); library("caret"); library("randomForest")
+wd <- getwd()
+fileUrl_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+fileUrl_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+file_train <- "pml-training.csv"
+file_test <- "pml-testing.csv"
+if(!file.exists(file_train)) {
+        download.file(fileUrl_train, file_train)
+}
+if(!file.exists(file_test)) {
+        download.file(fileUrl_test, file_test)
+}
+training <- read.csv(paste(wd, "/", file_train, sep = ""))
+testing <- read.csv(paste(wd, "/", file_test, sep = ""))
+```
+
+## 2.Basic exploratory data analyses and cleansing
+At first we explore data to see its size, the number of variables, data types and missing values for each column in the dataset by running the following R commands. The output of these commands can be found in the Appendix at the end of this report.
+
+    - dim(training)
+    - str(training)
+    - summary(training)
+    - head(training)
+
+A lot of valiables in the training dataset seem to have many NAs, therefore it would be worth to further investigate about NAs so that we can make a decision as to how we handle NAs to reduce the number of predictors.
+
+```{r}
+missing <- sapply(training, function(x) sum(is.na(x)))
+summary(as.factor(missing))
+```
+
+67 variables out of the total 160 have 19,216 NAs, which is approximately 98% of all observations (because 19,216/19,622 = 98%). Thus, these variables have data for only 2% of observations, hence it would be reasonable to exclude them from analysis. The rest of 93 variables have no NAs.
+
+```{r}
+training <- subset(training[,names(missing[missing == 0])])
+```
+Now, we will need to exclude the same variables from test dataset to run prediction successfully. At first we will quickly explore the test dataset to ensure the right variables to exclude. The output of these commands can be found in the Appendix at the end of this report.
+
+    - dim(testing)
+    - str(testing)
+    - summary(testing)
+    - head(testing)
+
+We found that the test dataset does not have "classe" variable, instead it has "problem_id". Therefore we make a minor modification to the "missing" vector to use it to remove equiverent valiables from the testing dataset.
+
+```{r}
+missing_test <- missing[names(missing) != "classe"]
+testing <- subset(testing[,names(missing_test[missing_test == 0])])
+```
+Next, in the same way, we will look for variables that don't have values (i.e. not NA but empty) for many observations and see if it's reasonable to exclude them from analysis, too.
+
+```{r}
+missing <- sapply(training, function(x) sum(x == ""))
+summary(as.factor(missing))
+```
+33 variables out of total 93 have 19,216 values whose length is zero, which is approximately 19,216/19,622 = 98% of all the observations. Hence, we decide to exclude them from analysis, too. The rest of 60 variables have no values whose length is zero (i.e. empty).
+
+```{r}
+training <- subset(training[,names(missing[missing == 0])])
+missing_test <- missing[names(missing) != "classe"]
+testing <- subset(testing[,names(missing_test[missing_test == 0])])
+```
+In addition, given the nature of the variables, the following six columns do not need to be part of the predictors. (It's obvious that row sequence numbers, user names, time stamps, etc. are not related to the quality of exercise.)
+
+    - X
+    - user_name
+    - raw_timestamp_part_1
+    - raw_timestamp_part_2
+    - cvtd_timestamp
+    - new_window
+
+```{r}
+training <- subset(training,
+                   select = -c(X, user_name, raw_timestamp_part_1,
+                               raw_timestamp_part_2, cvtd_timestamp, new_window))
+testing <- subset(testing,
+                   select = -c(X, user_name, raw_timestamp_part_1,
+                               raw_timestamp_part_2, cvtd_timestamp, new_window))
+```
+
+## 3.Building a machine learning algorithm
+This section explains how the model was built and why I made the choice. Based on the above preliminary data exploration, we reduced the variables from 160 to only 53 excluding "classe". Now we will build a model using these 53 variables.
+
+There may be several options available to fit the model such as Liner regression (lm), General liner regression (glm), Liner discriminant analysis (lda), random forest, bagging, boosting, etc. As a starter, we will use **random forest** with **k-fold cross validation (k = 3)** and see how accurate its prediction is and if its computation (performance) is efficient enough.
+
+```{r}
+set.seed(1)
+folds <- createFolds(y=training$classe, k=3, list=TRUE, returnTrain=TRUE)
+sapply(folds,length)
+```
+Let's try to build a model using Fold1 and see the accuracy (error rate).
+Note that the number of trees grown by the R randomForest function is 500 by default.
+
+```{r}
+trainingset1 <- training[folds[[1]],]
+testingset1 <- training[-folds[[1]],]
+system.time(fit1 <- randomForest(classe ~ ., data=trainingset1))
+pred1 <- predict(fit1, testingset1)
+accuracy1 <- sum(testingset1$classe == pred1)/length(pred1)
+accuracy1
+print(fit1)
+```
+It took approximately 40 seconds to fit the model and the accurachy is 99.7% or OOB estimate of error rate is 0.39%. Both performance and accuracy are quite acceptable.
+  
+## 4.Expected out of sample error
+In this section we further examine the expected "out of sample error". Below shows the confusion matrix of the fit. Also please find the plot that shows how error rate changes as the number of trees grows. The solid black curve is the Out-of-Bag error rate and the other dotted colored lines are the error rate for each "Classe" (A, B, C, D and E).
+
+```{r}
+fit1$confusion
+plot(fit1)
+```
+
+According to the plot, as the number of trees grow, the error rate decreases until around 30 to 50 trees and then it seems to become flat at well below 2%. Probably tuning the number of trees grown (ntree) could improve the performance (computation) without sacrificing the accuracy. We will see the difference by fitting with "ntree = 50".
+
+```{r}
+system.time(fit50 <- randomForest(classe ~ ., data=trainingset1, ntree=50))
+pred50 <- predict(fit50, testingset1)
+accuracy50 <- sum(testingset1$classe == pred50)/length(pred50)
+accuracy50
+print(fit50)
+plot(fit50)
+```
+
+After changing the number of trees grown from 500 to 50, fitting the model took only 4 second, i.e. 10 times better, yet the accuracy is still 99.6% or or OOB estimate of error rate is 0.6%, which is quite impressive.
+
+By the way, we fitted random forest using "train" function, which is part of Caret package.
+Here is the command used. We learned that it took approximately 3 hours to compute.
+
+    "fit <- train(classe ~ ., method="rf", data=trainingset)"
+
+## 5.Estimating the error with cross-validation
+Given the above results, We are satisfied with both performance and accuracy. We decided not to examine any other modeling techniques such as lm and glm. However, we will futher validate the model using Cross Validation by using Fold2 and Fold3 created above.
+
+```{r}
+trainingset2 <- training[folds[[2]],]
+trainingset3 <- training[folds[[3]],]
+testingset2 <- training[-folds[[2]],]
+testingset3 <- training[-folds[[3]],]
+system.time(fit2 <- randomForest(classe ~ ., data=trainingset2, ntree=50))
+system.time(fit3 <- randomForest(classe ~ ., data=trainingset3, ntree=50))
+```
+The performance to fit the model with "ntree=50" is quite stable around 4 second.
+
+```{r}
+pred2 <- predict(fit2, testingset2)
+pred3 <- predict(fit3, testingset3)
+accuracy2 <- sum(testingset2$classe == pred2)/length(pred2)
+accuracy3 <- sum(testingset3$classe == pred3)/length(pred3)
+accuracy2; accuracy3
+```
+Accuracy seems to be always high around 99.7%.
+
+```{r}
+print(fit2)
+print(fit3)
+```
+OOB estimate of error rate is also always around 0.5%, which is reasonably low.
+
+## 6. Predicting the 20 test cases for assignment submission
+Finally, we apply the machine learning algorithm built above to each of the 20 test cases. We use all three models (fit1, fit2 and fit3) and compare the results.
+
+```{r}
+result1 <- predict(fit1, testing)
+result2 <- predict(fit2, testing)
+result3 <- predict(fit3, testing)
+result1; result2; result3
+```
+Here you see all three results are identical each other. We submitted the assignment and confirmed that the results of all 20 test cases above are in fact correct.
+
+## 7. Appendix
+
+### 7-1. Exploring training data
+
+```{r}
+dim(training)
+str(training)
+summary(training)
+head(training)
+```
+
+### 7-1. Exploring testing data
+
+```{r}
+dim(testing)
+str(testing)
+summary(testing)
+head(testing)
+```
+
